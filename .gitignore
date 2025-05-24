@@ -1,0 +1,10 @@
+# Python関連
+__pycache__/
+*.pyc
+
+# VSCodeなどエディタ関連
+.vscode/
+
+# 共有フォルダ内の動画・画像を無視（ただしフォルダ自体は残す）
+/shared/*
+!/shared/.gitkeep
