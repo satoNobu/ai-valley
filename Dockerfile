@@ -1,3 +1,4 @@
+# Dockerfile
 FROM python:3.10-slim
 
 # 必要なシステムパッケージをインストール
@@ -16,9 +17,10 @@ WORKDIR /app
 
 # スクリプトをコピー
 COPY extract_frames.py ./
+COPY make_score_video.py ./
 
-# YOLOv8モデルをダウンロード（最新版モデルURLを指定）
+# YOLOv8モデルをダウンロード（初回のみ）
 RUN curl -L -o yolov8n.pt https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt || echo "⬇️ モデルURLは必要に応じて更新してください"
 
-# 実行コマンド
+# デフォルトの実行コマンド（あとで書き換えてもOK）
 CMD ["python", "extract_frames.py"]
