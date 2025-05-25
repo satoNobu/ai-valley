@@ -51,14 +51,30 @@ while cap.isOpened():
 
         # === YOLOによる物体検出 ===
         results = model(frame)
-        result_img = results[0].plot()  # バウンディングボックスなどを描画した画像を取得
+        detections = results[0].boxes
 
-        # === フレーム保存 ===
+        # sports ball のみ抽出
+        for box, cls in zip(detections.xyxy, detections.cls):
+            class_id = int(cls.item())
+            if model.names[class_id] == "sports ball":
+                x1, y1, x2, y2 = map(int, box[:4])
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
+                cv2.putText(
+                    frame,
+                    "sports ball",
+                    (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.9,
+                    (0, 255, 255),
+                    2
+                )
+
+        # バウンディングボックス付き画像として保存
         frame_filename = os.path.join(output_dir, f"frame_{saved_count:04d}.jpg")
-        cv2.imwrite(frame_filename, result_img)
+        cv2.imwrite(frame_filename, frame)
         saved_count += 1
 
     frame_count += 1
 
 cap.release()
-print(f"✅ Saved {saved_count} frames with timestamps and YOLO detections.")
+print(f"✅ Saved {saved_count} frames with timestamps and YOLO detections (person + sports ball).")
