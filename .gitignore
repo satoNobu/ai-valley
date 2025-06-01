@@ -8,3 +8,9 @@ __pycache__/
 # 共有フォルダ内の動画・画像を無視（ただしフォルダ自体は残す）
 /shared/*
 !/shared/.gitkeep
+dataset/*/*
+!dataset/block/.keep
+!dataset/none/.keep
+!dataset/receive/.keep
+!dataset/serve/.keep
+!dataset/spike/.keep
