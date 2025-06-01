@@ -6,8 +6,8 @@ __pycache__/
 .vscode/
 
 # 共有フォルダ内の動画・画像を無視（ただしフォルダ自体は残す）
-/shared/*
-!/shared/.gitkeep
+shared/*
+!shared/.keep
 dataset/*/*
 !dataset/block/.keep
 !dataset/none/.keep
