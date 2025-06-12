@@ -1,3 +1,5 @@
+# predict_frames.py - 複数モデルによるマルチ動作検出（spike, block, receive, serve）対応
+
 import os
 import cv2
 import numpy as np
@@ -6,29 +8,37 @@ from tensorflow.keras.preprocessing.image import img_to_array, load_img
 
 # 設定
 IMG_SIZE = (64, 64)
-MAX_FRAMES = 100
-MODEL_PATH = "/shared/spike_action_model_lstm.h5"
+MAX_FRAMES = 10
 FRAME_DIR = "/shared/frames"
-OUTPUT_DIR = "/shared/spike_frames"
-CLASSES = ['spike', 'receive', 'block']
-THRESHOLD = 0.6
+OUTPUT_DIR = "/shared/action_frames"
+MODELS = {
+    "spike": "/shared/spike_model.h5",
+    "block": "/shared/block_model.h5",
+    "receive": "/shared/receive_model.h5",
+    "serve": "/shared/serve_model.h5",
+}
+THRESHOLD = 0.4
 PRE_FRAMES = 10
 POST_FRAMES = 30
-SKIP_AFTER_DETECTION = 30  # 次の検出を抑制するフレーム数
+SKIP_AFTER_DETECTION = 30
 
 # モデル読み込み
-model = load_model(MODEL_PATH)
+loaded_models = {k: load_model(v) for k, v in MODELS.items()}
 
-# 出力ディレクトリ準備
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# 出力先フォルダ作成
+for cls in MODELS.keys():
+    os.makedirs(os.path.join(OUTPUT_DIR, cls), exist_ok=True)
 
-# フレーム画像を取得しソート
-frame_files = sorted([f for f in os.listdir(FRAME_DIR) if f.endswith(".jpg")])
+# フレーム取得
+frame_files = sorted([f for f in os.listdir(FRAME_DIR) if f.lower().endswith(".jpg")])
 
-# 各フレームを1枚ずつスライドしながら判定
-detected_frames = []
+# 検出記録
+detected_frames = {cls: [] for cls in MODELS.keys()}
 i = 0
 while i < len(frame_files) - MAX_FRAMES:
+    if i % 50 == 0:
+        print(f"🌀 Processing frame {i}/{len(frame_files)} ...", flush=True)
+
     batch_files = frame_files[i:i + MAX_FRAMES]
     frames = []
     for fname in batch_files:
@@ -38,37 +48,39 @@ while i < len(frame_files) - MAX_FRAMES:
         frames.append(arr)
 
     clip = np.expand_dims(np.stack(frames, axis=0), axis=0)
-    preds = model.predict(clip, verbose=0)[0]
-    pred_class = CLASSES[np.argmax(preds)]
-    confidence = np.max(preds)
 
-    if pred_class == 'spike' and confidence >= THRESHOLD:
-        detected_frames.append(i + MAX_FRAMES // 2)  # 中央フレームを記録
-        i += SKIP_AFTER_DETECTION
-    else:
-        i += 1
+    hit = False
+    for cls, model in loaded_models.items():
+        preds = model.predict(clip, verbose=0)[0]
+        confidence = preds[1]  # index 1 = targetクラス（2値分類 [not_class, class]）
+        if confidence >= THRESHOLD:
+            detected_frames[cls].append(i + MAX_FRAMES // 2)
+            print(f"✅ Detected {cls} ({confidence:.2f}) at frame {i}", flush=True)
+            hit = True
 
-# スパイクごとにclip出力
-clip_index = 0
-used = set()
-for center in detected_frames:
-    start = max(center - PRE_FRAMES, 0)
-    end = min(center + POST_FRAMES, len(frame_files))
+    i += SKIP_AFTER_DETECTION if hit else 1
 
-    # 重複検出を避ける
-    if any(f in used for f in range(start, end)):
-        continue
+# clip保存
+for cls, centers in detected_frames.items():
+    clip_index = 0
+    used = set()
+    for center in centers:
+        start = max(center - PRE_FRAMES, 0)
+        end = min(center + POST_FRAMES, len(frame_files))
 
-    for f in range(start, end):
-        used.add(f)
+        if any(f in used for f in range(start, end)):
+            continue
 
-    clip_dir = os.path.join(OUTPUT_DIR, f"clip_{clip_index:04d}")
-    os.makedirs(clip_dir, exist_ok=True)
-    for f in range(start, end):
-        fname = frame_files[f]
-        src = os.path.join(FRAME_DIR, fname)
-        dst = os.path.join(clip_dir, fname)
-        cv2.imwrite(dst, cv2.imread(src))
-    clip_index += 1
+        for f in range(start, end):
+            used.add(f)
 
-print(f"✅ {clip_index}件のスパイク動作を検出・分割しました！")
+        clip_dir = os.path.join(OUTPUT_DIR, cls, f"clip_{clip_index:04d}")
+        os.makedirs(clip_dir, exist_ok=True)
+        for f in range(start, end):
+            fname = frame_files[f]
+            src = os.path.join(FRAME_DIR, fname)
+            dst = os.path.join(clip_dir, fname)
+            cv2.imwrite(dst, cv2.imread(src))
+        clip_index += 1
+
+print("✅ 全モデルによるclip抽出が完了しました")

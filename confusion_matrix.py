@@ -8,6 +8,16 @@
 # ├── receive/
 # └── block/
 
+# ディレクトリ構成:
+# dataset/
+# ├── spike/
+# ├── receive/
+# ├── block/
+# ├── none/
+# └── serve/
+
+# confusion_matrix.py - 正例 vs 他すべて（マルチ負例）対応版
+
 import os
 import glob
 import numpy as np
@@ -16,14 +26,27 @@ from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import TimeDistributed, Conv2D, MaxPooling2D, Flatten, LSTM, Dense, Masking
 from tensorflow.keras.preprocessing.image import img_to_array, load_img
 
-# 読み込み設定
+# 共通設定
 IMG_SIZE = (64, 64)
 MAX_FRAMES = 20
-CLASSES = ['spike', 'receive', 'block']
 DATASET_DIR = 'dataset'
-MODEL_PATH = '/shared/spike_action_model_lstm.h5'
+MODEL_SAVE_DIR = '/shared'
+TARGET_CLASSES = ['spike', 'block', 'receive', 'serve']
 
-# パディング付きのclip読み込み（フレーム名自由対応）
+# モデル作成関数
+def create_model(output_classes):
+    model = Sequential([
+        TimeDistributed(Conv2D(16, (3, 3), activation='relu'), input_shape=(MAX_FRAMES, *IMG_SIZE, 3)),
+        TimeDistributed(MaxPooling2D((2, 2))),
+        TimeDistributed(Flatten()),
+        Masking(mask_value=0.0),
+        LSTM(32),
+        Dense(output_classes, activation='softmax')
+    ])
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    return model
+
+# clip読み込み
 def load_clip(folder_path):
     frame_paths = sorted(glob.glob(os.path.join(folder_path, "*.jpg")))
     frames = []
@@ -38,42 +61,37 @@ def load_clip(folder_path):
         frames.append(pad_frame)
     return np.stack(frames, axis=0)
 
-# データセット読み込み
-def load_dataset():
+# データセット読み込み（正例 vs 他すべて）
+def load_dataset_for_class(target_class):
     clips = []
     labels = []
-    for label_idx, label in enumerate(CLASSES):
+    all_classes = os.listdir(DATASET_DIR)
+    for label in all_classes:
         label_dir = os.path.join(DATASET_DIR, label)
+        if not os.path.isdir(label_dir):
+            continue
         for clip_name in os.listdir(label_dir):
             clip_path = os.path.join(label_dir, clip_name)
             clip = load_clip(clip_path)
             if clip is not None:
+                label_val = 1 if label == target_class else 0
                 clips.append(clip)
-                labels.append(label_idx)
-    return np.array(clips), tf.keras.utils.to_categorical(labels, num_classes=len(CLASSES))
+                labels.append(label_val)
+    return np.array(clips), tf.keras.utils.to_categorical(labels, num_classes=2)
 
-X, y = load_dataset()  # shape: (N, MAX_FRAMES, 64, 64, 3)
+# 各モデルの学習と保存
+for action in TARGET_CLASSES:
+    print(f"\n🧠 モデル: {action} vs all others")
+    X, y = load_dataset_for_class(action)
+    model_path = os.path.join(MODEL_SAVE_DIR, f"{action}_model.h5")
 
-# 既存モデルがあれば読み込む、なければ新規作成
-if os.path.exists(MODEL_PATH):
-    model = load_model(MODEL_PATH)
-    print("✅ 既存モデルを読み込みました")
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])  # 追学習可能にするため再コンパイル
-else:
-    model = Sequential([
-        TimeDistributed(Conv2D(16, (3, 3), activation='relu'), input_shape=(MAX_FRAMES, *IMG_SIZE, 3)),
-        TimeDistributed(MaxPooling2D((2, 2))),
-        TimeDistributed(Flatten()),
-        Masking(mask_value=0.0),
-        LSTM(32),
-        Dense(len(CLASSES), activation='softmax')
-    ])
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-    print("🆕 新しいモデルを作成しました")
+    if os.path.exists(model_path):
+        model = load_model(model_path)
+        print(f"✅ {action}_model 読み込み済")
+    else:
+        model = create_model(2)
+        print(f"🆕 {action}_model 新規作成")
 
-# モデル学習（積み重ね型）
-model.fit(X, y, epochs=10, batch_size=4)
-
-# モデル保存（外部共有フォルダに出力）
-model.save(MODEL_PATH)
-print("💾 モデルを保存しました：", MODEL_PATH)
+    model.fit(X, y, epochs=10, batch_size=4)
+    model.save(model_path)
+    print(f"💾 {action}_model 保存済 → {model_path}")
