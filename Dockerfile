@@ -18,6 +18,7 @@ WORKDIR /app
 COPY extract_frames.py ./
 COPY confusion_matrix.py ./
 COPY predict_frames.py ./
+COPY predict_frames_slim.py ./
 
 # 必要に応じてデータセットもコピーしたい場合はこちら（今回は sharedマウントでOK）
 

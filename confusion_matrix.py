@@ -15,6 +15,7 @@
 # ├── block/
 # ├── none/
 # └── serve/
+# └── tosu/
 
 # confusion_matrix.py - 正例 vs 他すべて（マルチ負例）対応版
 
@@ -22,16 +23,20 @@ import os
 import glob
 import numpy as np
 import tensorflow as tf
+
+# ✅ Eager Execution を有効化
+tf.config.run_functions_eagerly(True)
+
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import TimeDistributed, Conv2D, MaxPooling2D, Flatten, LSTM, Dense, Masking
 from tensorflow.keras.preprocessing.image import img_to_array, load_img
 
 # 共通設定
 IMG_SIZE = (64, 64)
-MAX_FRAMES = 20
+MAX_FRAMES = 10
 DATASET_DIR = 'dataset'
 MODEL_SAVE_DIR = '/shared'
-TARGET_CLASSES = ['spike', 'block', 'receive', 'serve']
+TARGET_CLASSES = ['spike', 'block', 'receive', 'serve', 'tosu']
 
 # モデル作成関数
 def create_model(output_classes):
@@ -77,20 +82,28 @@ def load_dataset_for_class(target_class):
                 label_val = 1 if label == target_class else 0
                 clips.append(clip)
                 labels.append(label_val)
-    return np.array(clips), tf.keras.utils.to_categorical(labels, num_classes=2)
+    return np.array(clips, dtype=np.float32), tf.keras.utils.to_categorical(labels, num_classes=2).astype(np.float32)
 
 # 各モデルの学習と保存
 for action in TARGET_CLASSES:
     print(f"\n🧠 モデル: {action} vs all others")
     X, y = load_dataset_for_class(action)
-    model_path = os.path.join(MODEL_SAVE_DIR, f"{action}_model.h5")
 
+    print(f"{action}: X.shape = {X.shape}, y.shape = {y.shape}")
+    if len(X) == 0:
+        print(f"🚫 Skipping {action} due to empty dataset.")
+        continue
+
+    model_path = os.path.join(MODEL_SAVE_DIR, f"{action}_model.h5")
     if os.path.exists(model_path):
         model = load_model(model_path)
         print(f"✅ {action}_model 読み込み済")
     else:
         model = create_model(2)
         print(f"🆕 {action}_model 新規作成")
+    print(f"🧪 X type: {type(X)}, dtype: {X.dtype if hasattr(X, 'dtype') else 'N/A'}")
+    print(f"🧪 y type: {type(y)}, dtype: {y.dtype if hasattr(y, 'dtype') else 'N/A'}")
+    print(f"🧪 X sample shape: {[x.shape for x in X[:2]] if len(X) > 0 else 'empty'}")
 
     model.fit(X, y, epochs=10, batch_size=4)
     model.save(model_path)

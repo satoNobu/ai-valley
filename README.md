@@ -47,3 +47,9 @@ docker run --rm \
   -v $(pwd)/shared:/shared \
   video-frame-yolo \
   python predict_frames.py
+
+### 3. 自動で抽出（学習用）
+docker run --rm \
+  -v $(pwd)/shared:/shared \
+  video-frame-yolo \
+  python predict_frames_slim.py
