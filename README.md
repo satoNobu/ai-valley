@@ -29,7 +29,7 @@ video_frame_extractor/
 
 ## 実行
 ### 1. 動画の検出
-input_video.mp4という動画でshared配下に配置
+input_video.mp4という動画でshared配下に分割したframeを配置
 以下のコマンドを実行
 
 docker run --rm -v $(pwd)/shared:/shared video-frame-yolo

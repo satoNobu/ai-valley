@@ -18,7 +18,7 @@ MODELS = {
     "serve": "/shared/serve_model.h5",
 }
 THRESHOLD = 0.5
-SKIP_AFTER_DETECTION = 30
+SKIP_AFTER_DETECTION = 5
 
 # モデル読み込み
 loaded_models = {k: load_model(v) for k, v in MODELS.items()}
@@ -77,5 +77,39 @@ for cls, centers in detected_frames.items():
             if img is not None:
                 cv2.imwrite(dst, img)
         clip_index += 1
+
+# 🔍 その他の（いずれにも該当しなかった）clipを保存
+os.makedirs(os.path.join(OUTPUT_DIR, "other"), exist_ok=True)
+used_indices = set(idx for centers in detected_frames.values() for idx in centers)
+
+clip_index = 0
+for i in range(len(frame_files) - MAX_FRAMES):
+    if i in used_indices:
+        continue
+
+    # 50フレームごとに進捗表示
+    if i % 50 == 0:
+        print(f"🌀 [Other] Processing frame {i}/{len(frame_files)} ...", flush=True)
+
+    batch_files = frame_files[i:i + MAX_FRAMES]
+    if len(batch_files) < MAX_FRAMES:
+        continue
+
+    # 再度 clip を作成（このタイミングで読み込み）
+    frames = []
+    for fname in batch_files:
+        img_path = os.path.join(FRAME_DIR, fname)
+        img = cv2.imread(img_path)
+        if img is not None:
+            frames.append(img)
+    if len(frames) < MAX_FRAMES:
+        continue
+
+    clip_dir = os.path.join(OUTPUT_DIR, "other", f"clip_oth_{clip_index:04d}")
+    os.makedirs(clip_dir, exist_ok=True)
+    for fname, img in zip(batch_files, frames):
+        dst = os.path.join(clip_dir, fname)
+        cv2.imwrite(dst, img)
+    clip_index += 1
 
 print("✅ 動作判定されたclipのみ抽出しました（前後フレームなし）")
