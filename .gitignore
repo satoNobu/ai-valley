@@ -10,6 +10,7 @@ shared/*
 !shared/.keep
 dataset/*/*
 output/*/*
+output/*
 !dataset/block/.keep
 !dataset/none/.keep
 !dataset/receive/.keep
