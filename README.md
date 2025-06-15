@@ -9,6 +9,9 @@ video_frame_extractor/
 ├── Dockerfile
 ├── requirements.txt
 ├── extract_frames.py
+├── output 　　　　　　　　　　 ←人物IDを割り振り
+├　├──　frame_0276.jpg
+├　├──　track_results.json   ←人物IDのjson
 └── shared/
     ├── input_video.mp4      ← 動画をここに置く
     └── frames/              ← 抽出画像がここに出力される
@@ -39,6 +42,11 @@ python3 run_deep_sort.py
 
 ### 3. 学習様用データの作成（手動）
 python3 person_selector.py
+
+　L 画像を選択（上下で移動）
+　L Enter をタップ
+　L 分類分け
+　L qで終了
 
 ### 2. スパイクなどの学習
 docker run --rm \

@@ -1,9 +1,10 @@
-# run_deep_sort.py - boxmotを使って人物追跡（ID付き）を実行
+# run_deep_sort.py - boxmotを使って人物追跡（ID付き）を実行＋トラッキング結果をJSONに保存
 
 import os
 import cv2
 import torch
 import numpy as np
+import json
 from glob import glob
 from boxmot.tracker_zoo import create_tracker
 from boxmot.utils import TRACKER_CONFIGS
@@ -15,6 +16,7 @@ OUTPUT_DIR = "output"
 MODEL_PATH = "yolov8n.pt"
 TRACKER_NAME = "bytetrack"
 TRACKER_CONFIG_PATH = TRACKER_CONFIGS / f"{TRACKER_NAME}.yaml"
+TRACK_JSON_PATH = os.path.join(OUTPUT_DIR, "track_results.json")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -33,6 +35,9 @@ frame_paths = sorted(glob(os.path.join(FRAME_DIR, "*.jpg")))
 total = len(frame_paths)
 print(f"🔍 {total} フレームを処理します")
 
+# ✅ トラッキング結果保存用
+tack_results_dict = {}
+
 # ✅ メインループ
 for frame_id, frame_path in enumerate(frame_paths):
     frame = cv2.imread(frame_path)
@@ -41,46 +46,48 @@ for frame_id, frame_path in enumerate(frame_paths):
         continue
 
     results = yolo(frame)[0]
-
-    # 検出結果を抽出
-    detection_list = []
+    detections = []
     for box in results.boxes:
         cls_id = int(box.cls[0])
         if cls_id != 0:
             continue
-        x1, y1, x2, y2 = map(float, box.xyxy[0])
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
         conf = float(box.conf[0])
-        detection_list.append([x1, y1, x2, y2, conf, float(cls_id)])
+        detections.append([x1, y1, x2, y2, conf, float(cls_id)])
 
-    # ✅ 配列化 + 安全な形状保証
-    if len(detection_list) == 0:
+    detections = np.array(detections, dtype=np.float32)
+    if detections.size == 0:
         detections = np.empty((0, 6), dtype=np.float32)
-    else:
-        detections = np.array(detection_list, dtype=np.float32)
-        if detections.ndim != 2 or detections.shape[1] != 6:
-            print(f"[ERROR] Invalid detections shape: {detections.shape}")
-            detections = np.empty((0, 6), dtype=np.float32)
-        elif np.isnan(detections).any() or np.isinf(detections).any():
-            print("[ERROR] Detections contain NaN or Inf. Skipping frame.")
-            detections = np.empty((0, 6), dtype=np.float32)
 
-    # ✅ 確実な ndarray 確認ログ
-    print(f"[DEBUG] {frame_id+1}/{total} detections.shape: {detections.shape}, type: {type(detections)}")
-
-    # トラッカーに渡す
+    # トラッキング実行
     tracks = tracker.update(detections, frame)
 
+    # フレーム名
+    frame_name = os.path.basename(frame_path)
+    tack_results_dict[frame_name] = []
+
     for track in tracks:
-        # track = [x1, y1, x2, y2, track_id, ...]
         x1, y1, x2, y2 = map(int, track[:4])
         track_id = int(track[4])
+        cls_id = int(track[5])
+        tack_results_dict[frame_name].append({
+            "id": track_id,
+            "bbox": [x1, y1, x2, y2],
+            "cls": cls_id
+        })
+
+        # 可視化
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 200, 0), 2)
         cv2.putText(frame, f"ID {track_id}", (x1, y1 - 5),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
-    save_path = os.path.join(OUTPUT_DIR, os.path.basename(frame_path))
+    save_path = os.path.join(OUTPUT_DIR, frame_name)
     cv2.imwrite(save_path, frame)
 
-    print(f"🌀 処理中: {frame_id+1}/{total} → {os.path.basename(frame_path)}")
+    print(f"🌀 処理中: {frame_id+1}/{total} → {frame_name}")
 
-print("✅ 完了しました！トラッキング済画像は output/ に保存されました")
+# ✅ JSON保存
+with open(TRACK_JSON_PATH, "w") as f:
+    json.dump(tack_results_dict, f, indent=2)
+
+print("✅ 完了しました！トラッキング済画像とtrack_results.jsonを出力しました")
