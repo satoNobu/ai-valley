@@ -34,6 +34,11 @@ input_video.mp4という動画でshared配下に分割したframeを配置
 
 docker run --rm -v $(pwd)/shared:/shared video-frame-yolo
 
+### 2. ID付きで画像を出力
+python3 run_deep_sort.py
+
+### 3. 学習様用データの作成（手動）
+python3 person_selector.py
 
 ### 2. スパイクなどの学習
 docker run --rm \
